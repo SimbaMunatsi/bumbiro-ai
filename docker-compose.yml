@@ -25,9 +25,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Dynamically construct the DB URL using the synchronized secure variables
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
+      # DATABASE URL FIXED: Now includes the +psycopg driver and uses the docker network name
+      - DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
+      - PGVECTOR_DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
+      
+      # API & Security Keys
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+
+      # LangSmith Tracing Variables added for production logging
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT}
     depends_on:
       - postgres_db
 
