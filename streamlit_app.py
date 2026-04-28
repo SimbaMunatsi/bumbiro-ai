@@ -7,7 +7,7 @@ import streamlit as st
 
 
 st.set_page_config(
-    page_title="BUMBIRO",
+    page_title="BUMBIRO AI",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -181,18 +181,6 @@ def render_sidebar() -> None:
         )
 
         st.markdown("---")
-        st.markdown("### Try asking")
-        example_prompts = [
-           "How do I become a Zimbabwean citizen?",
-           "Under what circumstances can the President be removed from office?",
-           "What does the Constitution say about freedom of expression?",
-        ]
-        for prompt in example_prompts:
-            if st.button(prompt, use_container_width=True):
-                queue_prompt(prompt)
-                st.rerun()
-
-        st.markdown("---")
         if st.button("🚪 Logout", use_container_width=True):
             logout()
             st.rerun()
@@ -226,7 +214,7 @@ def render_header() -> None:
             background: rgba(255,255,255,0.02);
         }
         </style>
-        <div class="app-title">⚖️ BUMBIRO</div>
+        <div class="app-title">⚖️ BUMBIRO AI</div>
         <div class="app-subtitle">Learn about the Zimbabwean Constitution</div>
         """,
         unsafe_allow_html=True,
@@ -247,10 +235,10 @@ def render_welcome_state() -> None:
 
     cols = st.columns(2)
     suggestions = [
-        "What is the Constitution of Zimbabwe?",
-        "What is the role of Parliament?",
-        "When is a person a Zimbabwean citizen by birth?",
-        "Who/what is Bumbiro?",
+        "What is the Constitution of Zimbabwe? Discuss the process for amending it.",
+        "Evaluate the mechanisms for accountability and oversight of the security service",
+        "How does the Zimbabwean Constitution address the separation of powers?",
+        "Differentiate between the Constitutional Court and the Supreme Court.",
     ]
 
     for i, prompt in enumerate(suggestions):
