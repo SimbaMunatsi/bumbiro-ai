@@ -1,7 +1,70 @@
-version: '3.8'
+# version: '3.8'
+
+# services:
+#   # --- 1. The Vector Database Container ---
+#   postgres_db:
+#     image: pgvector/pgvector:pg16
+#     container_name: bumbiro_db
+#     restart: always
+#     environment:
+#       POSTGRES_USER: ${DB_USER}
+#       POSTGRES_PASSWORD: ${DB_PASSWORD}
+#       POSTGRES_DB: ${DB_NAME}
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+
+#   # --- 2. The FastAPI Backend Container ---
+#   bumbiro_api:
+#     build: 
+#       context: .
+#       dockerfile: Dockerfile
+#     container_name: bumbiro_api
+#     restart: always
+#     ports:
+#       - "8000:8000"
+#     environment:
+#       # DATABASE URL FIXED: Now includes the +psycopg driver and uses the docker network name
+#       - DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
+#       - PGVECTOR_DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
+      
+#       # API & Security Keys
+#       - OPENAI_API_KEY=${OPENAI_API_KEY}
+#       - SECRET_KEY=${SECRET_KEY}
+#       - ALGORITHM=${ALGORITHM}
+
+#       # LangSmith Tracing Variables added for production logging
+#       - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+#       - LANGSMITH_TRACING=${LANGSMITH_TRACING}
+#       - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
+#       - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT}
+#     depends_on:
+#       - postgres_db
+
+#   # --- 3. The Streamlit Frontend Container ---
+#   bumbiro_ui:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile.streamlit
+#     container_name: bumbiro_ui
+#     restart: always
+#     ports:
+#       - "8501:8501"
+#     environment:
+#       - API_URL=http://bumbiro_api:8000
+#     depends_on:
+#       - bumbiro_api
+
+# volumes:
+#   postgres_data:
+
+
+
+
+version: "3.9"
 
 services:
-  # --- 1. The Vector Database Container ---
   postgres_db:
     image: pgvector/pgvector:pg16
     container_name: bumbiro_db
@@ -14,47 +77,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  # --- 2. The FastAPI Backend Container ---
-  bumbiro_api:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    container_name: bumbiro_api
-    restart: always
-    ports:
-      - "8000:8000"
-    environment:
-      # DATABASE URL FIXED: Now includes the +psycopg driver and uses the docker network name
-      - DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
-      - PGVECTOR_DATABASE_URL=postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
-      
-      # API & Security Keys
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
-      - ALGORITHM=${ALGORITHM}
-
-      # LangSmith Tracing Variables added for production logging
-      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
-      - LANGSMITH_TRACING=${LANGSMITH_TRACING}
-      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
-      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT}
-    depends_on:
-      - postgres_db
-
-  # --- 3. The Streamlit Frontend Container ---
-  bumbiro_ui:
-    build:
-      context: .
-      dockerfile: Dockerfile.streamlit
-    container_name: bumbiro_ui
-    restart: always
-    ports:
-      - "8501:8501"
-    environment:
-      - API_URL=http://bumbiro_api:8000
-    depends_on:
-      - bumbiro_api
 
 volumes:
   postgres_data:
