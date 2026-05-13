@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     print("Shutting down BumbiroAI...")
 
 app = FastAPI(
-    title="Production RAG API",
+    title="BUMBIRO API",
     version="1.0",
     lifespan=lifespan
 )

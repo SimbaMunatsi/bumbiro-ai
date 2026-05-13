@@ -27,7 +27,7 @@ class IngestionPipeline:
         enriched_chunks = self.enricher.enrich(chunks)
         
         print("Storing chunks in vector database...")
-        # You can adjust batch_size here depending on your API limits
+        # batch_size can be adjusted depending on API limits
         total_stored = self.vector_store.store(enriched_chunks, batch_size=100)
         
         return total_stored

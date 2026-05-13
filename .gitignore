@@ -12,3 +12,11 @@ data/raw/
 
 # Testing/Evals
 .pytest_cache/
+
+# Ignore AWS credentials
+.aws/
+aws/
+
+# Ignore zip files and installers
+*.zip
+awscliv2.zip

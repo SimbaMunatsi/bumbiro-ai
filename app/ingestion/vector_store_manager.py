@@ -8,7 +8,7 @@ class VectorStoreManager:
         if not chunks:
             return 0
             
-        # --- NEW: Deduplicate chunks in-memory before database insertion ---
+        # Deduplicate chunks in-memory before database insertion ---
         unique_chunks = []
         seen_ids = set()
         duplicate_count = 0
@@ -33,7 +33,7 @@ class VectorStoreManager:
             # Extract our deterministic IDs for the upsert
             batch_ids = [chunk.metadata["chunk_id"] for chunk in batch]
             
-            # Add to Chroma (upserting safely)
+            # Add to PGVector (upserting safely)
             self.vector_store.add_documents(documents=batch, ids=batch_ids)
             total_stored += len(batch)
             print(f"Stored batch of {len(batch)} chunks... ({total_stored}/{len(unique_chunks)})")

@@ -31,6 +31,4 @@ class MemoryManager:
         await self.agentic.reflect_and_store(query, answer)
 
 def get_memory_manager(db: Session, session_id: str) -> MemoryManager:
-    # No more in-memory dictionary registries! 
-    # State is purely driven by the database and the session_id token.
     return MemoryManager(db, session_id)

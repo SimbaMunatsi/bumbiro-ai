@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 from typing import Any
 
@@ -33,9 +34,36 @@ def init_session_state() -> None:
     if "show_sources" not in st.session_state:
         st.session_state.show_sources = True
     if "backend_status" not in st.session_state:
-        st.session_state.backend_status = None
+        st.session_state.backend_status = False
     if "pending_prompt" not in st.session_state:
         st.session_state.pending_prompt = None
+
+
+def wait_for_backend() -> None:
+    """Check if backend is alive, if not, wait and show a spinner."""
+    # Skip the check if we already know the backend is awake for this session
+    if st.session_state.backend_status is True:
+        return
+
+    backend_ready = False
+    with st.spinner("🚀 Waking up the backend server... This usually takes 30-60 seconds."):
+        # Try up to 20 times (approx 1 minute)
+        for i in range(20): 
+            try:
+                # Ping the health endpoint using the global API_URL
+                response = requests.get(f"{API_URL}/health", timeout=5)
+                if response.status_code == 200:
+                    backend_ready = True
+                    break
+            except requests.exceptions.ConnectionError:
+                time.sleep(3) # Wait 3 seconds before retrying
+    
+    if not backend_ready:
+        st.error("The backend is taking longer than usual to start. Please refresh the page.")
+        st.stop()
+    else:
+        # Mark as ready so we don't run this check on every Streamlit UI interaction
+        st.session_state.backend_status = True
 
 
 # --- Authentication API Calls ---
@@ -215,7 +243,7 @@ def render_header() -> None:
         }
         </style>
         <div class="app-title">⚖️ BUMBIRO AI</div>
-        <div class="app-subtitle">Learn about the Zimbabwean Constitution</div>
+        <div class="app-subtitle">Learn about the Zimbabwe Constitution</div>
         """,
         unsafe_allow_html=True,
     )
@@ -226,7 +254,7 @@ def render_welcome_state() -> None:
         """
         <div class="empty-state">
             <p style="margin-bottom: 0.4rem;">
-                Ask questions about the Zimbabwean Constitution.
+                Ask questions about the Zimbabwe Constitution.
             </p>
         </div>
         """,
@@ -237,7 +265,7 @@ def render_welcome_state() -> None:
     suggestions = [
         "What is the Constitution of Zimbabwe? Discuss the process for amending it.",
         "Evaluate the mechanisms for accountability and oversight of the security service",
-        "How does the Zimbabwean Constitution address the separation of powers?",
+        "How does the Zimbabwe Constitution address the separation of powers?",
         "Differentiate between the Constitutional Court and the Supreme Court.",
     ]
 
@@ -329,6 +357,9 @@ def handle_query(user_query: str) -> None:
 
 def main() -> None:
     init_session_state()
+    
+    # Check if backend is awake before allowing interactions
+    wait_for_backend()
 
     # The Gatekeeper: Route users to Login if not authenticated
     if not st.session_state.is_authenticated:

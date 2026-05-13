@@ -12,7 +12,6 @@ class HybridRetriever(BaseRetriever):
         self.rrf_k = rrf_k 
 
     async def retrieve(self, query):
-        # --- THE FIX: Offload synchronous searches to background threads ---
         # This keeps FastAPI fully non-blocking without breaking SQLAlchemy!
         
         vector_results = await asyncio.to_thread(
