@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import json
 from typing import Any
 
 import requests
@@ -18,13 +19,10 @@ API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 
 def init_session_state() -> None:
-    # --- Auth States ---
     if "is_authenticated" not in st.session_state:
         st.session_state.is_authenticated = False
     if "access_token" not in st.session_state:
         st.session_state.access_token = None
-
-    # --- Chat States ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "session_id" not in st.session_state:
@@ -37,32 +35,29 @@ def init_session_state() -> None:
         st.session_state.backend_status = False
     if "pending_prompt" not in st.session_state:
         st.session_state.pending_prompt = None
+    if "current_sources" not in st.session_state:
+        st.session_state.current_sources = []
 
 
 def wait_for_backend() -> None:
-    """Check if backend is alive, if not, wait and show a spinner."""
-    # Skip the check if we already know the backend is awake for this session
     if st.session_state.backend_status is True:
         return
 
     backend_ready = False
     with st.spinner("🚀 Waking up the backend server... This usually takes 30-60 seconds."):
-        # Try up to 20 times (approx 1 minute)
         for i in range(20): 
             try:
-                # Ping the health endpoint using the global API_URL
                 response = requests.get(f"{API_URL}/health", timeout=5)
                 if response.status_code == 200:
                     backend_ready = True
                     break
             except requests.exceptions.ConnectionError:
-                time.sleep(3) # Wait 3 seconds before retrying
+                time.sleep(3) 
     
     if not backend_ready:
         st.error("The backend is taking longer than usual to start. Please refresh the page.")
         st.stop()
     else:
-        # Mark as ready so we don't run this check on every Streamlit UI interaction
         st.session_state.backend_status = True
 
 
@@ -84,7 +79,6 @@ def api_register(api_url: str, email: str, password: str) -> tuple[bool, str]:
 
 def api_login(api_url: str, email: str, password: str) -> tuple[bool, str]:
     try:
-        # OAuth2 strictly requires form data with 'username' and 'password'
         response = requests.post(
             f"{api_url}/auth/login",
             data={"username": email, "password": password},
@@ -108,22 +102,33 @@ def logout() -> None:
     st.session_state.session_id = str(uuid.uuid4())
 
 
-# --- Chat API Call ---
-def call_query_api(api_url: str, query: str, session_id: str, token: str) -> dict[str, Any]:
+# --- Chat API Call (NEW: Streaming Version) ---
+def stream_query_api(api_url: str, query: str, session_id: str, token: str):
     headers = {"Authorization": f"Bearer {token}"}
+    
+    # Request the stream endpoint
     response = requests.post(
-        f"{api_url}/query",
+        f"{api_url}/query-stream",
         json={"query": query, "session_id": session_id},
         headers=headers,
         timeout=120,
+        stream=True # This tells requests to keep the connection open
     )
+    
     if response.status_code == 401:
-        # Token expired or invalid
         logout()
         st.rerun()
         
     response.raise_for_status()
-    return response.json()
+    
+    # Process the stream line by line
+    for line in response.iter_lines():
+        if line:
+            data = json.loads(line.decode("utf-8"))
+            if data["type"] == "chunk":
+                yield data["content"] # Yield text for st.write_stream
+            elif data["type"] == "sources":
+                st.session_state.current_sources = data["content"] # Save sources
 
 
 # --- UI Components ---
@@ -308,65 +313,66 @@ def handle_query(user_query: str) -> None:
         st.markdown(user_query)
 
     with st.chat_message("assistant"):
-        response_placeholder = st.empty()
-
+        st.session_state.current_sources = [] # Reset sources for new stream
+        
         try:
-            with st.spinner("Thinking..."):
-                result = call_query_api(
-                    api_url=st.session_state.api_url,
-                    query=user_query,
-                    session_id=st.session_state.session_id,
-                    token=st.session_state.access_token, # Send the auth token
-                )
-
-            answer = str(result.get("answer", "")).strip()
-            sources = result.get("sources", [])
+            # Streamlit's write_stream takes the generator and creates the typing effect
+            stream_generator = stream_query_api(
+                api_url=st.session_state.api_url,
+                query=user_query,
+                session_id=st.session_state.session_id,
+                token=st.session_state.access_token, 
+            )
+            
+            # This blocks until the stream is fully typed out, returning the final string
+            full_answer = st.write_stream(stream_generator)
+            
+            # Grab the sources we stored when the stream finished
+            sources = st.session_state.current_sources
 
             if not isinstance(sources, list):
                 sources = [str(sources)]
 
-            if not answer:
-                answer = "No answer was returned by the backend."
+            if not full_answer:
+                full_answer = "No answer was returned by the backend."
+                st.write(full_answer)
 
-            response_placeholder.markdown(answer)
             render_sources(sources)
 
+            # Save the complete message to history
             st.session_state.messages.append(
                 {
                     "role": "assistant",
-                    "content": answer,
+                    "content": full_answer,
                     "sources": sources,
                 }
             )
 
         except requests.exceptions.HTTPError as exc:
             error_message = f"API error: {exc}"
-            response_placeholder.error(error_message)
+            st.error(error_message)
             st.session_state.messages.append({"role": "assistant", "content": error_message, "sources": []})
 
         except requests.exceptions.RequestException as exc:
             error_message = f"Connection error: {exc}"
-            response_placeholder.error(error_message)
+            st.error(error_message)
             st.session_state.messages.append({"role": "assistant", "content": error_message, "sources": []})
 
         except Exception as exc:
             error_message = f"Unexpected error: {exc}"
-            response_placeholder.error(error_message)
+            st.error(error_message)
             st.session_state.messages.append({"role": "assistant", "content": error_message, "sources": []})
 
 
 def main() -> None:
     init_session_state()
     
-    # Check if backend is awake before allowing interactions
     wait_for_backend()
 
-    # The Gatekeeper: Route users to Login if not authenticated
     if not st.session_state.is_authenticated:
         render_auth_page()
         return
 
-    # User is authenticated, render the main app
     render_sidebar()
     render_header()
 
