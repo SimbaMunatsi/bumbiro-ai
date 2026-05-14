@@ -95,6 +95,7 @@ def logout() -> None:
     st.session_state.is_authenticated = False
     st.session_state.access_token = None
     st.session_state.messages = []
+    st.session_state.session_id = str(uuid.uuid4())
 
 
 # --- Chat API Call (Streaming) ---
@@ -139,41 +140,44 @@ def handle_query(user_query: str) -> None:
     with st.chat_message("assistant"):
         st.session_state.current_sources = []
         
-        # 1. Show a 'Thinking' status while the backend is retrieving
-        with st.status("⚖️ BumbiroAI is analyzing the Constitution...", expanded=True) as status:
-            st.write("Retrieving relevant sections from Supabase...")
-            st.write("Consulting BM25 keyword index...")
+        # 1. The "Thinking" Phase
+        with st.status("⚖️ Analyzing the Constitution...", expanded=True) as status:
+            st.write("🔍 Retrieving relevant sections from Supabase...")
+            st.write("🗂️ Consulting BM25 keyword index...")
             
             try:
+                # Initialize the stream generator
                 stream_generator = stream_query_api(
                     api_url=st.session_state.api_url,
                     query=user_query,
                     session_id=st.session_state.session_id,
                     token=st.session_state.access_token, 
                 )
-                
-                # We start the stream. write_stream will consume the generator.
-                # The first token arrival will effectively end the 'waiting' phase.
-                status.update(label="Found relevant information! Generating answer...", state="running")
-                
-                full_answer = st.write_stream(stream_generator)
-                status.update(label="Analysis complete.", state="complete", expanded=False)
-
-                sources = st.session_state.current_sources
-                render_sources(sources)
-
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": full_answer,
-                    "sources": sources,
-                })
-
+                # Close the status box BEFORE we start streaming
+                status.update(label="Relevant information found!", state="complete", expanded=False)
+            
             except Exception as exc:
-                status.update(label="Error occurred.", state="error")
-                st.error(f"Error: {exc}")
+                status.update(label="Error connecting to backend.", state="error")
+                st.error(f"Connection Error: {exc}")
+                return
+
+        # 2. The "Typing" Phase (OUTSIDE the status box so it's fully visible)
+        try:
+            full_answer = st.write_stream(stream_generator)
+
+            sources = st.session_state.current_sources
+            render_sources(sources)
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": full_answer,
+                "sources": sources,
+            })
+
+        except Exception as exc:
+            st.error(f"Error during generation: {exc}")
 
 
-# --- Rest of UI (Condensed for brevity) ---
 def render_auth_page() -> None:
     st.markdown("<h1 style='text-align: center;'>⚖️ BUMBIRO AI</h1>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Login", "Register"])
@@ -192,25 +196,111 @@ def render_auth_page() -> None:
                 if s: st.success(m)
                 else: st.error(m)
 
+
 def render_sidebar():
     with st.sidebar:
         st.markdown("## ZIM Constitution AI")
-        if st.button("New chat"): st.session_state.messages = []; st.rerun()
+        if st.button("New chat"): 
+            st.session_state.session_id = str(uuid.uuid4())
+            st.session_state.messages = []
+            st.rerun()
         st.session_state.show_sources = st.toggle("Show sources", value=True)
         if st.button("Logout"): logout(); st.rerun()
+
+
+def render_header() -> None:
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            max-width: 900px;
+        }
+        .app-title {
+            font-size: 2.4rem;
+            font-weight: 700;
+            margin-top: 1.2rem;
+        }
+        .app-subtitle {
+            color: #9aa0a6;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        </style>
+        <div class="app-title">⚖️ BUMBIRO AI</div>
+        <div class="app-subtitle">Learn about the Zimbabwe Constitution</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_welcome_state() -> None:
+    # This is the new, prominent Welcome Message
+    st.markdown(
+        """
+        <div style="background-color: rgba(255, 255, 255, 0.05); padding: 2rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 2rem; text-align: center;">
+            <h2 style="margin-top: 0;">👋 Welcome to Bumbiro AI!</h2>
+            <p style="font-size: 1.1rem; color: #d2d2d2; line-height: 1.6;">
+                I am your intelligent legal assistant, specifically trained on the <strong>Constitution of Zimbabwe</strong>.<br>
+                You can ask me to explain constitutional rights, detail government structures, or analyze legal clauses.
+            </p>
+            <p style="font-size: 0.95rem; color: #9aa0a6;">
+                <em>Select a suggestion below or type your own question to get started.</em>
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    cols = st.columns(2)
+    suggestions = [
+        "What is the Constitution of Zimbabwe? Discuss the process for amending it.",
+        "Evaluate the mechanisms for accountability and oversight of the security service.",
+        "How does the Zimbabwe Constitution address the separation of powers?",
+        "Differentiate between the Constitutional Court and the Supreme Court.",
+    ]
+
+    def queue_prompt(prompt: str):
+        st.session_state.pending_prompt = prompt
+
+    for i, prompt in enumerate(suggestions):
+        with cols[i % 2]:
+            if st.button(prompt, use_container_width=True):
+                queue_prompt(prompt)
+                st.rerun()
+
 
 def main():
     init_session_state()
     wait_for_backend()
+    
     if not st.session_state.is_authenticated:
         render_auth_page()
         return
+        
     render_sidebar()
+    render_header()
+    
+    # Show the welcome state if there are no messages
+    if not st.session_state.messages:
+        render_welcome_state()
+
+    # Render previous messages
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
-            if m["role"] == "assistant": render_sources(m.get("sources", []))
+            if m["role"] == "assistant": 
+                render_sources(m.get("sources", []))
     
+    # Handle pending prompt from suggestion buttons
+    queued_prompt = st.session_state.pending_prompt
+    if queued_prompt:
+        st.session_state.pending_prompt = None
+        handle_query(queued_prompt)
+        st.rerun()
+
+    # Handle standard chat input
     if prompt := st.chat_input("Ask about the Zimbabwe Constitution"):
         handle_query(prompt)
 
