@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,19 +19,6 @@ async def query_rag(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # --- DIAGNOSTIC LOGGING ---
-    try:
-        print(f"\n--- DEBUG: Starting Retrieval for: {request.query} ---")
-        v_results = rag.vector_retriever.invoke(request.query)
-        b_results = rag.bm25_retriever.invoke(request.query)
-        print(f"--- VECTOR FOUND {len(v_results)} CHUNKS ---")
-        for doc in v_results: print(f"V-DOC: {doc.page_content[:100]}...")
-        print(f"--- BM25 FOUND {len(b_results)} CHUNKS ---")
-        for doc in b_results: print(f"B-DOC: {doc.page_content[:100]}...")
-        print("--- DEBUG: Retrieval Check Complete ---\n")
-    except Exception as e:
-        print(f"--- DEBUG: Retrieval Check Failed: {e} ---")
-
     secure_session_id = f"user_{current_user.id}_{request.session_id}"
     result = await rag.run(query=request.query, session_id=secure_session_id, db=db)
     
@@ -42,18 +30,22 @@ async def query_rag(
 
 async def simulated_stream(answer: str, sources: list):
     """
-    Yields JSON chunks. It streams the text tokens first, 
-    then sends the sources list in the final chunk.
+    Yields JSON chunks. Preserves all whitespace and newlines 
+    to maintain Markdown formatting.
     """
-    for token in answer.split():
-        # Re-add the space removed by split()
-        chunk_data = {"type": "chunk", "content": token + " "}
-        yield f"{json.dumps(chunk_data)}\n"
-        await asyncio.sleep(0.02)  # Simulate streaming delay
+    # re.split(r'(\s+)') splits the string but KEEPS the separators (newlines, spaces)
+    tokens = re.split(r'(\s+)', answer)
     
-    # Yield the sources at the very end
-    sources_data = {"type": "sources", "content": sources}
-    yield f"{json.dumps(sources_data)}\n"
+    for token in tokens:
+        if not token:
+            continue
+        chunk_data = {"type": "chunk", "content": token}
+        yield f"{json.dumps(chunk_data)}\n"
+        # Small delay for visual effect
+        await asyncio.sleep(0.01)
+    
+    # Final chunk for sources
+    yield f"{json.dumps({'type': 'sources', 'content': sources})}\n"
 
 
 @router.post("/query-stream")
@@ -63,9 +55,12 @@ async def query_stream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # This diagnostic print helps you see the 502 timing in Render logs
+    print(f"--- Processing stream request for user: {current_user.email} ---")
+    
     secure_session_id = f"user_{current_user.id}_{request.session_id}"
     
-    # Await the full generation
+    # The heavy lifting happens here (Retrieval + LLM)
     result = await rag.run(
         query=request.query,
         session_id=secure_session_id,
@@ -75,7 +70,6 @@ async def query_stream(
     clean_sources = result.get("sources", [])
     answer_text = str(result.get("answer", ""))
 
-    # Stream the resulting text and sources back using JSON Lines format
     return StreamingResponse(
         simulated_stream(answer_text, clean_sources),
         media_type="application/x-ndjson"
