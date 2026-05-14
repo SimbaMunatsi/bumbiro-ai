@@ -154,7 +154,7 @@ def handle_query(user_query: str) -> None:
                     token=st.session_state.access_token, 
                 )
                 # Close the status box BEFORE we start streaming
-                status.update(label="Relevant information found!", state="complete", expanded=False)
+                status.update(label="Thinking...wait for response generation", state="complete", expanded=False)
             
             except Exception as exc:
                 status.update(label="Error connecting to backend.", state="error")
@@ -257,8 +257,6 @@ def render_welcome_state() -> None:
     suggestions = [
         "What is the Constitution of Zimbabwe? Discuss the process for amending it.",
         "Evaluate the mechanisms for accountability and oversight of the security service.",
-        "How does the Zimbabwe Constitution address the separation of powers?",
-        "Differentiate between the Constitutional Court and the Supreme Court.",
     ]
 
     def queue_prompt(prompt: str):
